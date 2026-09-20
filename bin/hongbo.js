@@ -9,7 +9,7 @@ const config = require('../lib/config');
 const providers = require('../lib/engine/providers');
 const folders = require('../lib/folders');
 
-const HELP = `hongbo — 한라초 홍보 도우미
+const HELP = `hongbo — 제주 초등학교 홍보 도우미 (기본 설정은 한라초, 다른 학교는 config 의 school 만 바꾸면 됩니다)
 
 설정
   hongbo config show                         설정 보기 (키는 가려서 보여 줍니다)
@@ -19,8 +19,13 @@ const HELP = `hongbo — 한라초 홍보 도우미
   hongbo config set <항목> <값>               예) school.phone 064-740-9500 / photos.max 4 / providers.anthropic.model claude-haiku-4-5
   hongbo prompt files                        규칙·예시·연구학교 자료 편집 파일 만들기(경로 출력)
 
-훑기·활동
-  hongbo scan [--pages 1] [--no-school]      교육청 학교소식 최신 글 + 우리 학교 게시 현황 + 새 사진 폴더 요약
+훑기·보관함 (제주 모든 초등학교)
+  hongbo scan [--max-pages 6] [--no-bodies] [--no-school]   교육청 학교소식 새 글을 모두 모아 보관 + 우리 학교 게시 현황 + 새 사진 폴더 요약
+  hongbo archive list [--school 한림초] [--since 2026-09-01] [--topic 진로] [--limit 20]   보관한 글 목록
+  hongbo archive show <글번호>                 글 하나 전체 (본문·첨부 이름·주소)
+  hongbo archive stats [--since …]            학교별·주제별·날짜별 통계
+  hongbo archive schools                      보관함에 있는 학교 목록
+  hongbo archive export [--since …] [--school …] [--max 30] [--out 파일]   글 엔진 예시 형식으로 내보내기
   hongbo list                                활동 폴더 목록과 상태
   hongbo status <폴더>                        활동 하나의 상태
 
@@ -122,9 +127,39 @@ async function main() {
 
   if (cmd === 'scan') {
     const scan = require('../lib/scan');
-    const r = await scan.runScan(cfg, { pages: args.flags.pages ? Number(args.flags.pages) : undefined, skipSchool: args.flags.school === false, skipSearch: args.flags.search === false });
+    const r = await scan.runScan(cfg, { maxPages: args.flags['max-pages'] ? Number(args.flags['max-pages']) : undefined, fetchBodies: args.flags.bodies !== false,
+      skipSchool: args.flags.school === false, skipSearch: args.flags.search === false });
     const digest = scan.formatDigest(r, cfg);
     return print(Object.assign({ ok: true, digest }, r), digest);
+  }
+
+  if (cmd === 'archive') {
+    const archive = require('../lib/archive');
+    const q = { school: args.flags.school, since: args.flags.since, until: args.flags.until, topic: args.flags.topic, limit: args.flags.limit ? Number(args.flags.limit) : 20, excludeKindergarten: args.flags.kindergarten !== true };
+    const line = e => `${e.date} · ${e.school} · 「${e.title}」 (${e.dataSid}${e.topics && e.topics.length ? ' · ' + e.topics.slice(0, 3).join('·') : ''}${e.hasBody ? '' : ' · 요약만'})`;
+    if (sub === 'list' || !sub) {
+      const items = archive.list(q);
+      return print({ ok: true, count: items.length, items }, () => items.length ? items.map(line).join('\n') : '보관한 글이 없습니다. 먼저 hongbo scan 을 실행하세요.');
+    }
+    if (sub === 'show') {
+      const post = rest[0] && archive.get(rest[0]);
+      if (!post) return fail('글 번호를 찾을 수 없습니다: ' + (rest[0] || '(없음)') + '  (hongbo archive list 로 번호를 확인하세요)');
+      return print(Object.assign({ ok: true }, post), () => `${post.school} · ${post.date}${post.phone ? ' · ' + post.phone : ''}\n제목: ${post.title}\n${post.url}\n\n${post.body || '(본문 없음 — 요약)\n' + (post.summary || '')}${post.files && post.files.length ? '\n\n첨부: ' + post.files.map(f => f.name).join(', ') : ''}`);
+    }
+    if (sub === 'stats') {
+      const st = archive.stats(q);
+      return print(Object.assign({ ok: true }, st), () => `보관 글 ${st.total.toLocaleString('ko-KR')}건 · 학교 ${st.schools}곳 · ${st.from || '?'} ~ ${st.to || '?'}\n학교별: ${st.bySchool.slice(0, 10).map(x => x.name + ' ' + x.count).join(', ')}\n주제별: ${st.byTopic.slice(0, 10).map(x => x.name + ' ' + x.count).join(', ')}`);
+    }
+    if (sub === 'schools') {
+      const list = archive.schools();
+      return print({ ok: true, schools: list }, () => list.map(x => `${x.school} ${x.count}`).join('\n') || '(없음)');
+    }
+    if (sub === 'export') {
+      const text = archive.exportExamples(Object.assign({}, q, { max: args.flags.max ? Number(args.flags.max) : 30, limit: 100000 }));
+      if (args.flags.out) { require('fs').writeFileSync(args.flags.out, text + '\n', 'utf8'); return print({ ok: true, file: args.flags.out, chars: text.length }, `내보냈습니다: ${args.flags.out} (${text.length.toLocaleString('ko-KR')}자)`); }
+      return print({ ok: true, text }, text || '(본문이 있는 글이 없습니다)');
+    }
+    return fail('archive 하위 명령: list | show | stats | schools | export');
   }
 
   // 이하 활동 폴더가 필요한 명령
@@ -160,8 +195,8 @@ async function main() {
       } catch (e) { ph = { error: e.message, photos: [], picked: [] }; }
     }
     const usage = d.usage ? `입력 ${d.usage.inputTokens.toLocaleString('ko-KR')} · 출력 ${d.usage.outputTokens.toLocaleString('ko-KR')} 토큰${typeof d.usage.usd === 'number' ? ' · 약 $' + d.usage.usd.toFixed(3) : ''} · ${d.usage.providerLabel} ${d.usage.modelLabel}` : '';
-    return print({ ok: true, dir, folder: path.basename(dir), title: d.title, body: d.body, truncated: d.truncated, usage: d.usage, form: d.form, photos: ph },
-      () => `제목: ${d.title}\n\n${d.body}\n\n(${usage})${d.truncated ? '\n주의: 글이 길어 끝이 잘렸을 수 있습니다.' : ''}\n\n사진 ${ph.photos ? ph.photos.length : 0}장 준비, 추천 ${ph.picked ? ph.picked.length : 0}장${ph.error ? ' (사진 준비 실패: ' + ph.error + ')' : ''}\n확인 창: hongbo review "${path.basename(dir)}"`);
+    return print({ ok: true, dir, folder: path.basename(dir), title: d.title, body: d.body, truncated: d.truncated, usage: d.usage, form: d.form, warnings: d.warnings, photos: ph },
+      () => `제목: ${d.title}\n\n${d.body}\n\n(${usage})${d.truncated ? '\n주의: 글이 길어 끝이 잘렸을 수 있습니다.' : ''}${d.warnings && d.warnings.length ? '\n참고: ' + d.warnings.join(' / ') : ''}\n\n사진 ${ph.photos ? ph.photos.length : 0}장 준비, 추천 ${ph.picked ? ph.picked.length : 0}장${ph.error ? ' (사진 준비 실패: ' + ph.error + ')' : ''}\n확인 창: hongbo review "${path.basename(dir)}"`);
   }
 
   if (cmd === 'edit') {

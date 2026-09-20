@@ -1,7 +1,7 @@
 {
   "name": "hongbo",
   "version": "0.1.0",
-  "description": "한라초 홍보 도우미 — 교육청 학교소식 훑기, 사진 폴더로 홍보글 초안 만들기, 오픈클로(OpenClaw)로 승인·게시",
+  "description": "제주 초등학교 홍보 도우미 — 교육청 학교소식을 모든 학교 대상으로 모아 보관, 사진 폴더로 홍보글 초안, 오픈클로(OpenClaw)로 승인·게시",
   "private": true,
   "license": "UNLICENSED",
   "bin": { "hongbo": "bin/hongbo.js" },

@@ -75,7 +75,23 @@ test('명령줄: 설정 → 초안 → 승인 → 계획 → 게시 기록', asy
 
   const text = await run(['status', '안전체험관']);
   assert.ok(text.out.includes('게시 완료'));
-  assert.ok((await run(['help'])).out.includes('hongbo — 한라초 홍보 도우미'));
+  assert.ok((await run(['help'])).out.includes('hongbo — 제주 초등학교 홍보 도우미'));
+
+  // 보관함 명령
+  const archive = require('../lib/archive');
+  archive.save({ dataSid: '5', title: '한림초, 디지털 진로 체험의 날 운영', school: '한림초등학교', date: '2026-09-18', body: '□ 하나\n\n□ 둘\n\n□ 셋' });
+  archive.save({ dataSid: '6', title: '월랑유치원, 농장 체험', school: '월랑유치원', date: '2026-09-18', summary: 'x' });
+  const al = (await run(['archive', 'list', '--json'])).json;
+  assert.equal(al.count, 1); assert.equal(al.items[0].dataSid, '5');
+  assert.equal((await run(['archive', 'list', '--kindergarten', '--json'])).json.count, 2);
+  assert.equal((await run(['archive', 'show', '5', '--json'])).json.title, '한림초, 디지털 진로 체험의 날 운영');
+  assert.ok((await run(['archive', 'show', '5'])).out.includes('□ 셋'));
+  assert.equal((await run(['archive', 'stats', '--json'])).json.schools, 1);
+  assert.equal((await run(['archive', 'schools', '--json'])).json.schools[0].school, '한림초등학교');
+  const exp = await run(['archive', 'export', '--max', '5', '--out', path.join(root, 'ex.txt'), '--json']);
+  assert.equal(exp.json.ok, true); assert.ok(fs.readFileSync(path.join(root, 'ex.txt'), 'utf8').includes('제목: 한림초, 디지털 진로 체험의 날 운영'));
+  const nf = await run(['archive', 'show', '404', '--json']);
+  assert.equal(nf.code, 1); assert.match(nf.json.error, /글 번호를 찾을 수 없습니다/);
   const unknown = await run(['zzz']);
   assert.equal(unknown.code, 1); assert.match(unknown.err, /모르는 명령/);
 });
