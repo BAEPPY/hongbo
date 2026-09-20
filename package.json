@@ -1,0 +1,20 @@
+{
+  "name": "hongbo",
+  "version": "0.1.0",
+  "description": "한라초 홍보 도우미 — 교육청 학교소식 훑기, 사진 폴더로 홍보글 초안 만들기, 오픈클로(OpenClaw)로 승인·게시",
+  "private": true,
+  "license": "UNLICENSED",
+  "bin": { "hongbo": "bin/hongbo.js" },
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "sync-engine": "node scripts/sync-engine.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
+    "@google/genai": "^2.22.0",
+    "cheerio": "^1.0.0",
+    "openai": "^7.15.0",
+    "sharp": "^0.35.0"
+  }
+}

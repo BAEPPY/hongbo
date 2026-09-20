@@ -1,0 +1,7 @@
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+# 실제 활동 사진·초안은 저장소에 넣지 않습니다
+/사진/
+/photos/
